@@ -20,11 +20,19 @@ export type GalleryInfo = {
 export async function getGalleries(): Promise<GalleryInfo[]> {
 	// Get gallery entries from content collections
 	const galleryEntries = await getCollection("galleries");
+	const localImageModules = import.meta.glob(
+		"../content/galleries/**/*.{jpg,jpeg,png,webp,avif,gif}",
+		{ eager: true },
+	) as Record<string, { default: { src: string } }>;
 
 	// Process galleries in parallel for better performance
 	const galleryPromises = galleryEntries.map(async (entry) => {
 		// Extract slug from id: "gallery1/index" -> "gallery1"
 		const slug = entry.id.replace(/\/index$/, "");
+		const localImages = Object.entries(localImageModules)
+			.filter(([path]) => path.includes(`/content/galleries/${slug}/`))
+			.sort(([a], [b]) => a.localeCompare(b));
+
 		// Get images from Cloudinary API
 		const folderPath = `galleries/${slug}`;
 		let cloudinaryImages: Array<{
@@ -35,11 +43,15 @@ export async function getGalleries(): Promise<GalleryInfo[]> {
 			url: string;
 			secure_url: string;
 		}> = [];
-		let imageCount = 0;
+		let cloudinaryImageCount = 0;
 		let firstImageUrl = "";
 
-		cloudinaryImages = await listCloudinaryImages(folderPath);
-		imageCount = cloudinaryImages.length;
+		try {
+			cloudinaryImages = await listCloudinaryImages(folderPath);
+			cloudinaryImageCount = cloudinaryImages.length;
+		} catch {
+			cloudinaryImages = [];
+		}
 
 		// Sort images by public_id to get first image consistently
 		if (cloudinaryImages.length > 0) {
@@ -51,17 +63,28 @@ export async function getGalleries(): Promise<GalleryInfo[]> {
 			);
 		}
 
+		const localImageCount = localImages.length;
+		const firstLocalImageUrl = localImages[0]?.[1]?.default?.src || "";
+		const imageCount = cloudinaryImageCount + localImageCount;
+
 		// Use cover image from metadata if available, otherwise use first image from Cloudinary
 		let finalImagePath = entry.data.image || "";
 
-		// Convert local image path to Cloudinary URL if needed
 		if (finalImagePath && !finalImagePath.startsWith("http")) {
-			const publicId = localPathToCloudinaryPublicId(
-				`galleries/${slug}/${finalImagePath}`,
-			);
-			finalImagePath = buildCloudinaryThumbnailUrl(publicId, 600, 400);
+			const explicitLocalImage = localImages.find(([path]) =>
+				path.endsWith(`/${finalImagePath}`),
+			)?.[1]?.default?.src;
+
+			if (explicitLocalImage) {
+				finalImagePath = explicitLocalImage;
+			} else {
+				const publicId = localPathToCloudinaryPublicId(
+					`galleries/${slug}/${finalImagePath}`,
+				);
+				finalImagePath = buildCloudinaryThumbnailUrl(publicId, 600, 400);
+			}
 		} else if (!finalImagePath) {
-			finalImagePath = firstImageUrl;
+			finalImagePath = firstLocalImageUrl || firstImageUrl;
 		}
 
 		return {

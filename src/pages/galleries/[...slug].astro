@@ -25,6 +25,23 @@ export async function getStaticPaths() {
 const { entry } = Astro.props;
 const { slug } = Astro.params;
 
+// Get local images under src/content/galleries/<slug>/
+const localImageModules = import.meta.glob(
+	"../../content/galleries/**/*.{jpg,jpeg,png,webp,avif,gif}",
+	{ eager: true },
+) as Record<string, { default: { src: string; width: number; height: number } }>;
+
+const localImageEntries = Object.entries(localImageModules)
+	.filter(([path]) => path.includes(`/galleries/${slug}/`))
+	.sort(([a], [b]) => a.localeCompare(b))
+	.map(([path, mod]) => ({
+		publicId: path,
+		width: mod.default?.width || 400,
+		height: mod.default?.height || 400,
+		thumbnailSrc: mod.default?.src || "",
+		originalSrc: mod.default?.src || "",
+	}));
+
 // Get images from Cloudinary API
 const folderPath = `galleries/${slug}`;
 let cloudinaryImages: Array<{
@@ -62,12 +79,20 @@ const imageEntries = cloudinaryImages.map((image) => {
 	};
 });
 
+// Merge local images and Cloudinary images, remove duplicates by original URL
+const allImageEntries = [...localImageEntries, ...imageEntries].filter(
+	(image, index, arr) =>
+		Boolean(image.originalSrc) &&
+		arr.findIndex((candidate) => candidate.originalSrc === image.originalSrc) ===
+			index,
+);
+
 const galleryTitle = entry.data.title;
 const galleryDescription =
 	entry.data.description || `Photo gallery: ${galleryTitle}`;
 
 // Preload first 20 images
-const imagesToPreload = imageEntries.slice(0, 20);
+const imagesToPreload = allImageEntries.slice(0, 20);
 ---
 
 <MainGridLayout title={galleryTitle} description={galleryDescription}>
@@ -139,7 +164,7 @@ const imagesToPreload = imageEntries.slice(0, 20);
 		</div>
 
 		<section class="justified-gallery" id="gallery">
-			{imageEntries.map(({ thumbnailSrc, originalSrc, width, height }, index) => (
+			{allImageEntries.map(({ thumbnailSrc, originalSrc, width, height }, index) => (
 				<a
 					href={originalSrc}
 					data-fancybox="gallery"

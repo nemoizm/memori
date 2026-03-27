@@ -13,6 +13,8 @@ https://astro.build/themes/details/a-static-photo-gallery-template-built-with-as
 
 [**🖥️ Live Demo (Github Pages)**](https://codewithnemo.github.io/memori)
 
+All images from Unsplash
+
 ![Preview Image](./src/assets/images/demo.png)
 
 ## ✨ Features

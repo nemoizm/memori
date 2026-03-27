@@ -297,7 +297,6 @@ export async function listCloudinaryImages(folderPath: string): Promise<
 
 		return resources;
 	} catch (error) {
-		console.error("Error listing Cloudinary images:", error);
 		throw error;
 	}
 }
